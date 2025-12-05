@@ -15,52 +15,13 @@ import streamlit as st
 import numpy as np
 import cv2
 
-# Page Config (Mobile friendly title)
+# Page Config
 st.set_page_config(
-    page_title="Colorize App",
+    page_title="AI Colorizer Pro",
     page_icon="🎨",
-    layout="centered", # Mobilde 'centered' daha doğal durur
-    initial_sidebar_state="collapsed" # Mobilde menü kapalı başlasın
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
-
-# ---------------------------
-# 🎨 MOBİL İÇİN ÖZEL CSS (SİHİRLİ DOKUNUŞ)
-# ---------------------------
-st.markdown("""
-<style>
-    /* Üstteki renkli şeridi ve boşlukları kaldır */
-    .stAppHeader {display: none;}
-    .block-container {
-        padding-top: 1rem !important;
-        padding-bottom: 5rem !important;
-    }
-    
-    /* Footer'ı gizle */
-    footer {visibility: hidden;}
-    
-    /* Butonları mobilde daha büyük yap */
-    .stButton button {
-        width: 100%;
-        border-radius: 10px;
-        height: 3em;
-        font-weight: bold;
-    }
-    
-    /* Yükleme alanını mobilde daha kompakt yap */
-    [data-testid="stFileUploader"] {
-        padding: 10px;
-        border: 1px dashed #ccc;
-        border-radius: 10px;
-    }
-    
-    /* Mobil Galeri için Grid Ayarı */
-    div[data-testid="column"] {
-        width: 100% !important;
-        flex: 1 1 auto;
-        min-width: 100px;
-    }
-</style>
-""", unsafe_allow_html=True)
 
 # ---------------------------
 # 0. FAST GALLERY
@@ -78,11 +39,10 @@ if 'is_processed' not in st.session_state:
 
 def download_single_image(args):
     i, gallery_id = args
-    # Mobilde hızlı yüklenmesi için boyutu düşürdük (600x400 -> 400x300)
-    url = f"https://picsum.photos/seed/{gallery_id}_{i}/400/300?grayscale"
+    url = f"https://picsum.photos/seed/{gallery_id}_{i}/600/400?grayscale"
     path = os.path.join(SAMPLE_DIR, f"sample_{i}.jpg")
     try:
-        response = requests.get(url, timeout=3)
+        response = requests.get(url, timeout=5)
         if response.status_code == 200:
             img = Image.open(BytesIO(response.content))
             img.save(path)
@@ -118,7 +78,6 @@ def load_caffe_model():
 def load_gan_model():
     import tensorflow as tf
     from tensorflow.keras.models import load_model
-    #custom_path = "models/ram_safe_gan_epoch_20.h5" 
     custom_path = "models/gan_colorizer_epoch_70.h5" 
     if not os.path.exists(custom_path): return None, "GAN missing"
     try:
@@ -133,6 +92,7 @@ def colorize_engine(img, net_caffe, model_gan, mode, alpha=0.5, saturation=1.0,
                    green_red_shift=0, blue_yellow_shift=0):
     h, w = img.shape[:2]
     
+    # CAFFE
     normalized = img.astype("float32") / 255.0
     lab_c = cv2.cvtColor(normalized, cv2.COLOR_BGR2LAB)
     resized_c = cv2.resize(lab_c, (224, 224))
@@ -144,6 +104,7 @@ def colorize_engine(img, net_caffe, model_gan, mode, alpha=0.5, saturation=1.0,
     if "Caffe" in mode:
         final_ab = ab_c
     else:
+        # GAN
         try:
             gan_input_size = model_gan.input_shape[1]
             if gan_input_size is None: gan_input_size = 256
@@ -156,6 +117,7 @@ def colorize_engine(img, net_caffe, model_gan, mode, alpha=0.5, saturation=1.0,
         l_gan = l_gan.reshape(1, gan_input_size, gan_input_size, 1)
         ab_gan = model_gan.predict(l_gan)[0] * 128.0
         
+        # Calibration
         ab_gan[:,:,0] += green_red_shift 
         ab_gan[:,:,1] += blue_yellow_shift
         ab_gan = cv2.resize(ab_gan, (w, h))
@@ -165,6 +127,7 @@ def colorize_engine(img, net_caffe, model_gan, mode, alpha=0.5, saturation=1.0,
         else:
             final_ab = cv2.addWeighted(ab_gan, alpha, ab_c, 1 - alpha, 0)
 
+    # MERGE
     img_float_full = img.astype("float32") / 255.0
     lab_full = cv2.cvtColor(img_float_full, cv2.COLOR_BGR2LAB)
     l_full = lab_full[:,:,0]
@@ -180,7 +143,7 @@ def colorize_engine(img, net_caffe, model_gan, mode, alpha=0.5, saturation=1.0,
     return result
 
 # ---------------------------
-# 3. UI LAYOUT (MOBILE OPTIMIZED)
+# 3. UI LAYOUT
 # ---------------------------
 with st.sidebar:
     st.header("⚙️ Settings")
@@ -193,86 +156,89 @@ with st.sidebar:
         blend_val = st.slider("Model Balance", 0.0, 1.0, 0.6)
         sat_val = st.slider("Vibrance", 0.8, 1.5, 1.1)
         st.markdown("---")
-        with st.expander("🎛️ Calibration", expanded=False): # Mobilde yer kaplamasın diye kapalı
+        with st.expander("🎛️ Advanced Calibration", expanded=True):
             gr_shift = st.slider("Green 🟢 <-> 🔴 Red", -30, 30, 0)
             by_shift = st.slider("Blue 🔵 <-> 🟡 Yellow", -30, 30, 0)
     else:
-        st.caption("Advanced controls disabled in Caffe mode.")
+        st.info("Switch to Hybrid/GAN for more controls.")
 
-st.title("🎨 Colorize App")
+st.title("🎨 AI Colorizer Pro")
 
-# Callback to handle new uploads
-def on_upload_change():
-    st.session_state.selected_image_path = "uploaded"
-    st.session_state.is_processed = False
-
-# MOBILE TABS
-tab1, tab2 = st.tabs(["📸 Photo / Upload", "🖼️ Gallery"])
+tab1, tab2 = st.tabs(["📤 Upload Image", "🖼️ Gallery"])
 
 bw_img = None
 
-# TAB 1: UPLOAD (Camera Friendly)
+# --- DÜZELTME BURADA: Callback Fonksiyonu ---
+def on_upload_change():
+    """Dosya yüklendiğinde çalışır, modu 'uploaded' yapar."""
+    st.session_state.selected_image_path = "uploaded"
+    st.session_state.is_processed = False
+
+# TAB 1: UPLOAD
 with tab1:
-    # Mobilde bu bileşen otomatik olarak "Kamera" seçeneği sunar
-    uploaded = st.file_uploader("Take a photo or upload:", type=["jpg", "png", "jpeg"], on_change=on_upload_change)
+    # on_change parametresi ile sadece yükleme anında tetiklenir
+    uploaded = st.file_uploader("Upload B&W Image:", type=["jpg", "png", "jpeg"], on_change=on_upload_change)
     
     if uploaded:
         file_bytes = np.asarray(bytearray(uploaded.read()), dtype=np.uint8)
+        # Sadece mod 'uploaded' ise bunu göster, yoksa galeri seçimini koru
         if st.session_state.selected_image_path == "uploaded":
             bw_img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
-# TAB 2: GALLERY (Grid View)
+# TAB 2: GALLERY
 with tab2:
-    if st.button("🔄 Shuffle Gallery", use_container_width=True):
-        st.session_state.gallery_id = str(uuid.uuid4())
-        st.rerun()
+    col_a, col_b = st.columns([6, 1])
+    with col_b:
+        if st.button("🔄 Refresh"):
+            st.session_state.gallery_id = str(uuid.uuid4())
+            st.rerun()
     
-    with st.spinner("Loading..."):
+    with st.spinner("Downloading samples..."):
         sample_images = download_picsum_images_parallel(st.session_state.gallery_id)
     
-    # Mobilde daha iyi görünmesi için 6 sütun yerine 3 sütun yapıyoruz
-    # Telefon ekranında 3 sütun çok küçük gelirse Streamlit otomatik alt alta alır.
-    cols = st.columns(3) 
+    cols = st.columns(6)
     for i, img_path in enumerate(sample_images):
-        with cols[i % 3]:
+        with cols[i]:
             st.image(img_path, use_container_width=True)
-            if st.button(f"Pick #{i+1}", key=f"btn_{i}", use_container_width=True):
+            # Seçince modu dosya yoluna çevir ve işlemi başlat
+            if st.button(f"Select", key=f"btn_{i}", use_container_width=True):
                 st.session_state.selected_image_path = img_path
                 st.session_state.is_processed = True
                 st.rerun()
 
+# Eğer seçim galeriden ise resmi yükle
 if st.session_state.selected_image_path and st.session_state.selected_image_path != "uploaded":
     if os.path.exists(st.session_state.selected_image_path):
         bw_img = cv2.imread(st.session_state.selected_image_path)
 
 # ---------------------------
-# 4. EXECUTION AREA
+# 4. EXECUTION
 # ---------------------------
 if bw_img is not None:
     st.divider()
-    
-    # Mobilde resimler çok büyük olmasın diye sütun kullanmıyoruz, alt alta diziyoruz
-    st.markdown("#### 🌑 Original")
-    st.image(bw_img, channels="BGR", use_container_width=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        st.subheader("Original")
+        st.image(bw_img, channels="BGR", use_container_width=True)
 
+    # Buton kontrolü (Sadece manuel yüklemede buton gerekli)
     if st.session_state.selected_image_path == "uploaded" and not st.session_state.is_processed:
         if st.button("🚀 Colorize Now", type="primary", use_container_width=True):
             st.session_state.is_processed = True
             st.rerun()
     
+    # İşleme
     if st.session_state.is_processed:
-        st.divider()
-        st.markdown("#### 🌈 Result")
-        
-        net, e1 = load_caffe_model()
-        gan, e2 = load_gan_model()
-        
-        if net and gan:
-            try:
-                res = colorize_engine(bw_img, net, gan, model_mode, blend_val, sat_val, gr_shift, by_shift)
-                st.image(res, channels="BGR", use_container_width=True)
-                
-                _, buf = cv2.imencode(".png", res)
-                st.download_button("📥 Save Image", buf.tobytes(), "colorized.png", "image/png", use_container_width=True)
-            except Exception as e: st.error(str(e))
-        else: st.error(f"Models missing: {e1 or e2}")
+        with c2:
+            st.subheader("Result")
+            net, e1 = load_caffe_model()
+            gan, e2 = load_gan_model()
+            
+            if net and gan:
+                try:
+                    res = colorize_engine(bw_img, net, gan, model_mode, blend_val, sat_val, gr_shift, by_shift)
+                    st.image(res, channels="BGR", use_container_width=True)
+                    _, buf = cv2.imencode(".png", res)
+                    st.download_button("📥 Download HD", buf.tobytes(), "colorized.png", "image/png", use_container_width=True)
+                except Exception as e: st.error(str(e))
+            else: st.error(f"Models missing: {e1 or e2}")
