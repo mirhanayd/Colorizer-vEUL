@@ -78,6 +78,7 @@ def load_caffe_model():
 def load_gan_model():
     import tensorflow as tf
     from tensorflow.keras.models import load_model
+    custom_path = "models/ram_safe_gan_epoch_20.h5" 
     custom_path = "models/gan_colorizer_epoch_70.h5" 
     if not os.path.exists(custom_path): return None, "GAN missing"
     try:
@@ -147,7 +148,7 @@ def colorize_engine(img, net_caffe, model_gan, mode, alpha=0.5, saturation=1.0,
 # ---------------------------
 with st.sidebar:
     st.header("⚙️ Settings")
-    model_mode = st.radio("Method:", ("🏆 Hybrid Mode", "🤖 Professional (Caffe)", "🧪 My Model (GAN)"))
+    model_mode = st.radio("Method:", ( "🤖 Professional (Caffe)", "🧪 My Model (GAN)", "🏆 Hybrid Mode"))
     st.markdown("---")
     
     gr_shift, by_shift, blend_val, sat_val = 0, 0, 0.5, 1.0
