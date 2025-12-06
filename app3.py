@@ -9,7 +9,7 @@ import concurrent.futures
 # 🚀 SYSTEM SETTINGS
 # ---------------------------
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1" 
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1" # CPU Mode
 
 import streamlit as st
 import numpy as np
@@ -78,8 +78,32 @@ def load_caffe_model():
 def load_gan_model():
     import tensorflow as tf
     from tensorflow.keras.models import load_model
-    custom_path = "models\VGG-Based-U-Net-GAN.h5" 
-    if not os.path.exists(custom_path): return None, "GAN missing"
+    
+    # --- UPDATED FILE NAME ---
+    custom_path = "models/VGG-Based-U-Net-GAN.h5" 
+    
+    # --- UPDATED GITHUB LFS URL ---
+    # Points directly to the raw file in your repo
+    LFS_URL = "https://github.com/mirhanayd/Colorizer-vEUL/raw/main/models/VGG-Based-U-Net-GAN.h5"
+
+    # 1. Check if file exists, if not download
+    if not os.path.exists(custom_path):
+        with st.spinner("Downloading model from GitHub LFS..."):
+            try:
+                r = requests.get(LFS_URL, allow_redirects=True)
+                open(custom_path, 'wb').write(r.content)
+            except Exception as e:
+                return None, f"Download failed: {e}"
+
+    # 2. Check for LFS Pointer (File too small)
+    if os.path.getsize(custom_path) < 100000: # If < 100KB, it's likely a pointer
+        with st.spinner("Fixing LFS pointer... Downloading full model..."):
+            try:
+                r = requests.get(LFS_URL, allow_redirects=True)
+                open(custom_path, 'wb').write(r.content)
+            except Exception as e:
+                return None, f"LFS fix failed: {e}"
+
     try:
         model = load_model(custom_path, compile=False)
         return model, None
@@ -104,7 +128,7 @@ def colorize_engine(img, net_caffe, model_gan, mode, alpha=0.5, saturation=1.0,
     if "Caffe" in mode:
         final_ab = ab_c
     else:
-        # GAN
+        # GAN - Smart Input Shape Detection
         try:
             gan_input_size = model_gan.input_shape[1]
             if gan_input_size is None: gan_input_size = 256
@@ -113,8 +137,12 @@ def colorize_engine(img, net_caffe, model_gan, mode, alpha=0.5, saturation=1.0,
         img_resized = cv2.resize(img, (gan_input_size, gan_input_size))
         img_float = img_resized.astype("float32") / 255.0
         lab_gan = cv2.cvtColor(img_float, cv2.COLOR_BGR2LAB)
+        
+        # Normalization for GAN [-1, 1]
         l_gan = (lab_gan[:,:,0] / 50.0) - 1.0 
         l_gan = l_gan.reshape(1, gan_input_size, gan_input_size, 1)
+        
+        # Predict
         ab_gan = model_gan.predict(l_gan)[0] * 128.0
         
         # Calibration
@@ -127,7 +155,7 @@ def colorize_engine(img, net_caffe, model_gan, mode, alpha=0.5, saturation=1.0,
         else:
             final_ab = cv2.addWeighted(ab_gan, alpha, ab_c, 1 - alpha, 0)
 
-    # MERGE
+    # MERGE & HD
     img_float_full = img.astype("float32") / 255.0
     lab_full = cv2.cvtColor(img_float_full, cv2.COLOR_BGR2LAB)
     l_full = lab_full[:,:,0]
@@ -135,6 +163,7 @@ def colorize_engine(img, net_caffe, model_gan, mode, alpha=0.5, saturation=1.0,
     result_bgr = cv2.cvtColor(result_lab, cv2.COLOR_LAB2BGR)
     result = np.clip(result_bgr * 255, 0, 255).astype("uint8")
 
+    # SATURATION
     if saturation != 1.0:
         hsv = cv2.cvtColor(result, cv2.COLOR_BGR2HSV).astype("float32")
         hsv[:,:,1] = hsv[:,:,1] * saturation
@@ -147,59 +176,47 @@ def colorize_engine(img, net_caffe, model_gan, mode, alpha=0.5, saturation=1.0,
 # ---------------------------
 with st.sidebar:
     st.header("⚙️ Settings")
-    model_mode = st.radio("Method:", ( "🤖 Professional (Caffe)", "🧪 My Model (GAN)", "🏆 Hybrid Mode"))
+    model_mode = st.radio("Method:", ("🏆 Hybrid Mode", "🤖 Professional (Caffe)", "🧪 My Model (GAN)"))
     st.markdown("---")
     
     gr_shift, by_shift, blend_val, sat_val = 0, 0, 0.5, 1.0
-    if "Hybrid" in model_mode:
+    if "Caffe" not in model_mode:
         st.subheader("🎨 Adjustments")
         blend_val = st.slider("Model Balance", 0.0, 1.0, 0.6)
-        sat_val = st.slider("Vibrance", 0.8, 1.5, 1.5)
-        with st.expander("🎛️ Advanced Calibration", expanded=True):
-            gr_shift = st.slider("Green 🟢 <-> 🔴 Red", -30, 30, 0)
-            by_shift = st.slider("Blue 🔵 <-> 🟡 Yellow", -30, 30, 0)
-    elif "Caffe" in model_mode:
-        st.subheader("🎨 Adjustments")
-        sat_val = st.slider("Vibrance", 0.8, 1.5, 1.5)
-        with st.expander("🎛️ Advanced Calibration", expanded=True):
-            gr_shift = st.slider("Green 🟢 <-> 🔴 Red", -30, 30, 0)
-            by_shift = st.slider("Blue 🔵 <-> 🟡 Yellow", -30, 30, 0)
-    elif "GAN" in model_mode:
-        st.subheader("🎨 Adjustments")
-        sat_val = st.slider("Vibrance", 0.8, 1.5, 1.5)
+        sat_val = st.slider("Vibrance", 0.8, 1.5, 1.1)
+        st.markdown("---")
         with st.expander("🎛️ Advanced Calibration", expanded=True):
             gr_shift = st.slider("Green 🟢 <-> 🔴 Red", -30, 30, 0)
             by_shift = st.slider("Blue 🔵 <-> 🟡 Yellow", -30, 30, 0)
     else:
         st.info("Switch to Hybrid/GAN for more controls.")
 
-
 st.title("🎨 AI Colorizer Pro")
 
+# Callback to handle new uploads
+def on_upload_change():
+    st.session_state.selected_image_path = "uploaded"
+    st.session_state.is_processed = False
+
+# TABS
 tab1, tab2 = st.tabs(["📤 Upload Image", "🖼️ Gallery"])
 
 bw_img = None
 
-# --- DÜZELTME BURADA: Callback Fonksiyonu ---
-def on_upload_change():
-    """Dosya yüklendiğinde çalışır, modu 'uploaded' yapar."""
-    st.session_state.selected_image_path = "uploaded"
-    st.session_state.is_processed = False
-
 # TAB 1: UPLOAD
 with tab1:
-    # on_change parametresi ile sadece yükleme anında tetiklenir
-    uploaded = st.file_uploader("Upload B&W Image:", type=["jpg", "png", "jpeg"], on_change=on_upload_change)
+    uploaded = st.file_uploader("Upload a B&W Image:", type=["jpg", "png", "jpeg"], on_change=on_upload_change)
     
     if uploaded:
         file_bytes = np.asarray(bytearray(uploaded.read()), dtype=np.uint8)
-        # Sadece mod 'uploaded' ise bunu göster, yoksa galeri seçimini koru
         if st.session_state.selected_image_path == "uploaded":
             bw_img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
 # TAB 2: GALLERY
 with tab2:
     col_a, col_b = st.columns([6, 1])
+    with col_a:
+        st.write("Select a sample to test instantly.")
     with col_b:
         if st.button("🔄 Refresh"):
             st.session_state.gallery_id = str(uuid.uuid4())
@@ -212,13 +229,11 @@ with tab2:
     for i, img_path in enumerate(sample_images):
         with cols[i]:
             st.image(img_path, use_container_width=True)
-            # Seçince modu dosya yoluna çevir ve işlemi başlat
             if st.button(f"Select", key=f"btn_{i}", use_container_width=True):
                 st.session_state.selected_image_path = img_path
                 st.session_state.is_processed = True
                 st.rerun()
 
-# Eğer seçim galeriden ise resmi yükle
 if st.session_state.selected_image_path and st.session_state.selected_image_path != "uploaded":
     if os.path.exists(st.session_state.selected_image_path):
         bw_img = cv2.imread(st.session_state.selected_image_path)
@@ -228,20 +243,19 @@ if st.session_state.selected_image_path and st.session_state.selected_image_path
 # ---------------------------
 if bw_img is not None:
     st.divider()
-    c1, c2 = st.columns(2)
-    with c1:
+    
+    col1, col2 = st.columns(2)
+    with col1:
         st.subheader("Original")
         st.image(bw_img, channels="BGR", use_container_width=True)
 
-    # Buton kontrolü (Sadece manuel yüklemede buton gerekli)
     if st.session_state.selected_image_path == "uploaded" and not st.session_state.is_processed:
         if st.button("🚀 Colorize Now", type="primary", use_container_width=True):
             st.session_state.is_processed = True
             st.rerun()
     
-    # İşleme
     if st.session_state.is_processed:
-        with c2:
+        with col2:
             st.subheader("Result")
             net, e1 = load_caffe_model()
             gan, e2 = load_gan_model()
