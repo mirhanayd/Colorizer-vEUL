@@ -78,7 +78,7 @@ def load_caffe_model():
 def load_gan_model():
     import tensorflow as tf
     from tensorflow.keras.models import load_model
-    custom_path = "models/VGG-Based-U-Net-GAN.h5.h5" 
+    custom_path = "models\VGG-Based-U-Net-GAN.h5" 
     if not os.path.exists(custom_path): return None, "GAN missing"
     try:
         model = load_model(custom_path, compile=False)
