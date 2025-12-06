@@ -78,8 +78,7 @@ def load_caffe_model():
 def load_gan_model():
     import tensorflow as tf
     from tensorflow.keras.models import load_model
-    custom_path = "models/ram_safe_gan_epoch_20.h5" 
-    custom_path = "models/gan_colorizer_epoch_70.h5" 
+    custom_path = "models/VGG-Based-U-Net-GAN.h5.h5" 
     if not os.path.exists(custom_path): return None, "GAN missing"
     try:
         model = load_model(custom_path, compile=False)
@@ -152,16 +151,28 @@ with st.sidebar:
     st.markdown("---")
     
     gr_shift, by_shift, blend_val, sat_val = 0, 0, 0.5, 1.0
-    if "Caffe" not in model_mode:
+    if "Hybrid" in model_mode:
         st.subheader("🎨 Adjustments")
         blend_val = st.slider("Model Balance", 0.0, 1.0, 0.6)
-        sat_val = st.slider("Vibrance", 0.8, 1.5, 1.1)
-        st.markdown("---")
+        sat_val = st.slider("Vibrance", 0.8, 1.5, 1.5)
+        with st.expander("🎛️ Advanced Calibration", expanded=True):
+            gr_shift = st.slider("Green 🟢 <-> 🔴 Red", -30, 30, 0)
+            by_shift = st.slider("Blue 🔵 <-> 🟡 Yellow", -30, 30, 0)
+    elif "Caffe" in model_mode:
+        st.subheader("🎨 Adjustments")
+        sat_val = st.slider("Vibrance", 0.8, 1.5, 1.5)
+        with st.expander("🎛️ Advanced Calibration", expanded=True):
+            gr_shift = st.slider("Green 🟢 <-> 🔴 Red", -30, 30, 0)
+            by_shift = st.slider("Blue 🔵 <-> 🟡 Yellow", -30, 30, 0)
+    elif "GAN" in model_mode:
+        st.subheader("🎨 Adjustments")
+        sat_val = st.slider("Vibrance", 0.8, 1.5, 1.5)
         with st.expander("🎛️ Advanced Calibration", expanded=True):
             gr_shift = st.slider("Green 🟢 <-> 🔴 Red", -30, 30, 0)
             by_shift = st.slider("Blue 🔵 <-> 🟡 Yellow", -30, 30, 0)
     else:
         st.info("Switch to Hybrid/GAN for more controls.")
+
 
 st.title("🎨 AI Colorizer Pro")
 
