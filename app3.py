@@ -176,7 +176,7 @@ def colorize_engine(img, net_caffe, model_gan, mode, alpha=0.5, saturation=1.0,
 # ---------------------------
 with st.sidebar:
     st.header("⚙️ Settings")
-    model_mode = st.radio("Method:", ("🏆 Hybrid Mode", "🤖 Professional (Caffe)", "🧪 My Model (GAN)"))
+    model_mode = st.radio("Method:", ("🏆 Hybrid Mode", "Professional (Caffe)", "My Model (ÇAY)"))
     st.markdown("---")
     
     gr_shift, by_shift, blend_val, sat_val = 0, 0, 0.5, 1.0
@@ -200,7 +200,7 @@ with st.sidebar:
             gr_shift = st.slider("Green 🟢 <-> 🔴 Red", -30, 30, 0)
             by_shift = st.slider("Blue 🔵 <-> 🟡 Yellow", -30, 30, 0)
     else:
-        st.info("Switch to Hybrid/GAN for more controls.")
+        st.info("Switch to Hybrid for more controls.")
 
 st.title("🎨 AI Colorizer Pro")
 
