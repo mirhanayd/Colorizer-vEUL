@@ -176,11 +176,17 @@ def colorize_engine(img, net_caffe, model_gan, mode, alpha=0.5, saturation=1.0,
 # ---------------------------
 with st.sidebar:
     st.header("⚙️ Settings")
-    model_mode = st.radio("Method:", ("🏆 Hybrid Mode", "Professional (Caffe)", "My Model (ÇAY)"))
+    model_mode = st.radio("Method:", ("Professional (Caffe)", "My Model (ÇAY)", "🏆 Hybrid Mode"))
     st.markdown("---")
     
     gr_shift, by_shift, blend_val, sat_val = 0, 0, 0.5, 1.0
     if "Caffe" in model_mode:
+        st.subheader("🎨 Adjustments")
+        sat_val = st.slider("Vibrance", 0.8, 1.5, 1.1)
+        with st.expander("🎛️ Advanced Calibration", expanded=True):
+            gr_shift = st.slider("Green 🟢 <-> 🔴 Red", -30, 30, 0)
+            by_shift = st.slider("Blue 🔵 <-> 🟡 Yellow", -30, 30, 0)
+    elif "ÇAY" in model_mode:
         st.subheader("🎨 Adjustments")
         sat_val = st.slider("Vibrance", 0.8, 1.5, 1.1)
         with st.expander("🎛️ Advanced Calibration", expanded=True):
@@ -193,14 +199,6 @@ with st.sidebar:
         with st.expander("🎛️ Advanced Calibration", expanded=True):
             gr_shift = st.slider("Green 🟢 <-> 🔴 Red", -30, 30, 0)
             by_shift = st.slider("Blue 🔵 <-> 🟡 Yellow", -30, 30, 0)
-    elif "GAN" in model_mode:
-        st.subheader("🎨 Adjustments")
-        sat_val = st.slider("Vibrance", 0.8, 1.5, 1.1)
-        with st.expander("🎛️ Advanced Calibration", expanded=True):
-            gr_shift = st.slider("Green 🟢 <-> 🔴 Red", -30, 30, 0)
-            by_shift = st.slider("Blue 🔵 <-> 🟡 Yellow", -30, 30, 0)
-    else:
-        st.info("Switch to Hybrid for more controls.")
 
 st.title("🎨 AI Colorizer Pro")
 
